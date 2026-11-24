@@ -63,90 +63,34 @@ def crop_segment(video, start, end, out_path, fps=30):
     return {"start": s, "end": e, "n": len(frames), "W": w, "H": h}
 
 
+
 def run_gemx_segment(clip, bbx, pt_out, gem, camera_mode="background"):
-    """单个段跑 GEM-X"""
-    sys.path.insert(0, str(gem))
-    import copy
+    """单个段跑 GEM-X。
 
-    import torch
-    import gem.inference.body_video as BV
+    关键设计：**跨进程**调用。
+    主流程环境（.venv-p1）没有 torch；GEM-X 需要独立环境（sp-gem）。
+    所以在 sp-gem 解释器里跑 m3_run_gemx.py，主流程只传文件路径。
+    """
+    import tempfile as _tmp
 
-    # ---- 确定性开关（1.0 发布阻塞项，见方案第 9 节）----
-    # GEM-X 是 torch 模型。同一输入两次跑，j3d_world 有 91% 元素不同、
-    # 最大差 1.07e-6 m —— 这是 GPU 浮点归约顺序导致的，不是精度不足。
-    # 关掉 cuDNN 的算法自动选择、固定种子后，归约顺序才固定。
-    torch.use_deterministic_algorithms(True, warn_only=True)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cuda.matmul.allow_tf32 = False
-    torch.backends.cudnn.allow_tf32 = False
-    torch.manual_seed(0)
-    torch.cuda.manual_seed_all(0)
-    from gem.common.detectors.tracks import (TrackResult, smooth_boxes,
-                                             square_crops)
-    from gem.inference.camera_motion import camera_angular_velocity
-    from gem.inference.motion import load_predictor, run_motion
-    from gem.inference.serialization import save_predictions, tensor_tree
-    from gem.inference.video import VideoFrames, normalize_video
-
-    cfg0 = BV.load_body_video_config(
-        Path(gem) / "docs/configs/body_video_native77.yaml")
-    predictor = load_predictor(cfg0["motion"]["checkpoint"], cfg0["motion"],
-                               stats_path=cfg0["motion"].get("stats"),
-                               device="cuda")
-
-    def make_tracks(n_frames, H, W, bbx_in):
-        B = np.asarray(bbx_in, dtype=np.float32)
-        if len(B) != n_frames:
-            src = np.linspace(0, 1, len(B))
-            dst = np.linspace(0, 1, n_frames)
-            B = np.stack([np.interp(dst, src, B[:, c]) for c in range(4)],
-                         1).astype(np.float32)
-        B[:, [0, 2]] = np.clip(B[:, [0, 2]], 0, W-1)
-        B[:, [1, 3]] = np.clip(B[:, [1, 3]], 0, H-1)
-        empty = [np.zeros((0, 4), np.float32) for _ in range(n_frames)]
-        return TrackResult(
-            np.arange(n_frames), B, square_crops(smooth_boxes(B), 1.2),
-            np.zeros(n_frames, np.int32), np.ones(n_frames, bool),
-            (0, n_frames-1), [b[None] for b in B], empty,
-            [b[None] for b in B],
-            [np.ones(1, np.float32) for _ in range(n_frames)],
-            ["provided_by_ski_professor"] * n_frames)
-
-    cfg = copy.deepcopy(cfg0)
-    cfg.setdefault("camera", {})["mode"] = camera_mode
-
-    BV.detect_track = lambda frames, det, **kw: make_tracks(
-        len(frames), *frames[0].shape[:2], bbx)
-
-    with tempfile.TemporaryDirectory() as tmp:
-        meta = normalize_video(clip, Path(tmp) / "in.mp4")
-        with VideoFrames(Path(tmp) / "in.mp4") as frames:
-            seq, tracks, camera = BV.build_body_conditions(
-                frames, cfg, device="cuda", progress=lambda m: None)
-        meta["normalized"].pop("path", None)
-        s = dict(seq)
-        nf = int(seq["length"][0])
-        if camera is None:
-            s["cam_angvel"] = camera_angular_velocity(
-                torch.eye(3).repeat(nf, 1, 1)).unsqueeze(0)
-            cam = {"R_w2c": torch.eye(3).repeat(nf, 1, 1),
-                   "diagnostics": {"method": "static"}}
-        else:
-            cam = camera
-        res = run_motion(predictor, s, device="cuda")
-        res = tensor_tree({**res, "format": "gem_body_video_predictions_v1",
-                           "video": meta, "release": cfg, "conditions": s,
-                           "tracking": {k: v for k, v in tracks.__dict__.items()},
-                           "camera": cam})
-        res["video"]["source"]["path"] = str(clip.resolve())
-        pt_out.parent.mkdir(parents=True, exist_ok=True)
-        save_predictions(res, pt_out)
-
-    del predictor
-    torch.cuda.empty_cache()
+    runner = Path(__file__).resolve().parent / "m3_run_gemx.py"
+    with _tmp.TemporaryDirectory() as td:
+        bbx_p = Path(td) / "bbx.npy"
+        np.save(bbx_p, np.asarray(bbx, dtype=np.float32))
+        r = subprocess.run(
+            [PY_SPGEM, str(runner),
+             "--clip", str(clip),
+             "--bbx", str(bbx_p),
+             "--out", str(pt_out),
+             "--gem", str(gem),
+             "--camera", camera_mode],
+            capture_output=True, text=True, cwd=str(gem))
+        if r.returncode != 0:
+            tail = (r.stderr or r.stdout or "")[-400:]
+            raise RuntimeError(f"GEM-X 进程失败 rc={r.returncode}: {tail}")
+    if not Path(pt_out).exists():
+        raise RuntimeError(f"GEM-X 未产出 {pt_out}")
     return pt_out
-
 
 def main():
     ap = argparse.ArgumentParser()
