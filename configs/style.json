@@ -1,0 +1,43 @@
+{
+  "_说明": "ski-professor 视觉规范（Apple / Google / Tesla 风格）：单色为主、最多两个强调色、细线、深色描边保证在白雪上可见。所有渲染（骨架视频、2D 回放、3D 回放、图表）共用这一份。颜色为 #RRGGBB",
+  "skeleton": {
+    "left": "#FFFFFF",
+    "right": "#A7B0BC",
+    "center": "#FFFFFF",
+    "halo": "#000000",
+    "halo_alpha": 0.38,
+    "line_px_per_720": 2.4,
+    "halo_extra_px": 2.0,
+    "joint_radius_per_720": 3.0,
+    "inferred_alpha": 0.35
+  },
+  "accent": {
+    "com": "#FF3B30",
+    "axis": "#0A84FF",
+    "ski": "#0A84FF",
+    "spin_axis": "#FFD60A"
+  },
+  "hud": {
+    "bg": "#000000",
+    "bg_alpha": 0.45,
+    "text": "#FFFFFF",
+    "sub": "#A7B0BC",
+    "font": "-apple-system, 'SF Pro Text', 'Inter', 'PingFang SC', sans-serif",
+    "radius_px": 10
+  },
+  "scene3d": {
+    "background": "#0B0C0E",
+    "grid": "#1C1F24",
+    "body": "#D5D9DF",
+    "body_right": "#9AA3AE",
+    "ski": "#2C3036",
+    "ski_edge": "#0A84FF"
+  },
+  "chart": {
+    "line": "#E6E8EB",
+    "line2": "#7D8590",
+    "accent": "#0A84FF",
+    "grid": "#23272E",
+    "mark": "#FF3B30"
+  }
+}

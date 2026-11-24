@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "airtime"
+version = "1.0.0"
+description = "Airtime — Freestyle ski motion analysis from a single video"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "PanYuHaa" }]
+keywords = ["pose-estimation", "ski", "3d-reconstruction", "sports-analysis", "computer-vision"]
+
+dependencies = [
+    "numpy>=1.24",
+    "opencv-python>=4.8",
+    "onnxruntime-gpu>=1.17",
+    "rtmlib>=0.0.10",
+]
+
+[project.optional-dependencies]
+# GEM-X 三维重建需要（按官网安装 CUDA 版 torch）
+gemx = ["torch>=2.0", "torchvision"]
+dev = ["pytest>=7", "ruff"]
+
+[project.scripts]
+airtime = "airtime.run:main"
+airtime-check = "airtime.cfg:main"
+
+[project.urls]
+Homepage = "https://github.com/PanYuHaa/Airtime"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

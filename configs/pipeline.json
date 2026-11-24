@@ -1,0 +1,338 @@
+{
+  "_说明": "P1 流水线全部可调参数。代码里不得硬编码这些值，必须从这里读。改阈值只改这个文件。",
+  "m0_preprocess": {
+    "target_fps": 30,
+    "short_side": 1080,
+    "hdr": {
+      "_说明": "HDR 素材分流规则（按 ffprobe 的 color_transfer 自动判，代码里不出现视频编号）。模型输入 vs 给人看的输出是两件事：(1) 模型输入保持现状——Mac 实测 3 条 HLG 做不做色调映射检出率完全相同、关键点置信度差≤0.03，不做映射往往最高，已验收结果不受影响；(2) 给人看的视频跟随原片格式，见 m8_render.color。PQ 不向下兼容，进模型前必须先映射。",
+      "model_input": {
+        "hlg": "passthrough",
+        "pq": "tonemap",
+        "sdr": "passthrough"
+      },
+      "pq_tonemap": {
+        "operator": "mobius",
+        "npl": 1000
+      }
+    },
+    "shot_detect": {
+      "_说明": "镜头切分：单条规则 diff > max(median*mult, abs_min)。阈值由 m0_shot.py 在真值上标定。",
+      "mult": 4.0,
+      "abs_min": 0.35,
+      "sample_max": 400,
+      "min_shot_frames": 15
+    }
+  },
+  "m1_track": {
+    "_说明": "目标运动员锁定 + 切段。全部视频共用同一套规则。",
+    "min_person_height_px": 80,
+    "height_ref_width": 1080,
+    "height_hysteresis": 0.0,
+    "height_hysteresis_说明": "门限迟滞（进门/出门用不同门限）。默认 0 = 关闭，保持与已验收结果一致。实测（tests/measure_hysteresis_impact.py）设成 0.10 会改变 12 条已验收视频中17 帧的骨架/仅跟踪判定（video5 6 帧、video9 7 帧、video7 2 帧、video12 2 帧），这些帧框高都在 72–80px，远低于验收核心集 200px，但仍会改动已交付结果，因此默认不启用。只有当确定性修复后仍有门限边界翻转时才需要打开。",
+    "max_gap_sec": 0.5,
+    "min_segment_frames": 15,
+    "assoc": {
+      "_说明": "轨迹拼接的关联代价门限。速度预测 + 全局贪心。",
+      "cost_max": 0.55,
+      "max_miss_frames": 45
+    },
+    "sam2": {
+      "enabled": true,
+      "model": "small",
+      "jpeg_quality": 95,
+      "short_side": 720
+    },
+    "lock": {
+      "_说明": "目标锁定的通用判据。防止锁定「拍摄者本人 / 他的影子 / 只露一半的身体」。判据只用框的几何属性与轨迹统计，不含任何视频编号。",
+      "edge_px": 2.0,
+      "edge_px_说明": "框边到画面边界小于这个像素数，视为「贴边」= 人体被裁掉只露一部分。",
+      "min_aspect": 0.12,
+      "min_aspect_说明": "最小宽高比。正常人站立约 0.2–0.5；9px 宽 × 175px 高的窄条是 0.05，属残片。横躺/翻转时会变小，所以不设太高。",
+      "max_aspect": 3.0,
+      "max_aspect_说明": "最大宽高比。超过说明框的是横向的物体，不是完整人体。",
+      "min_track_frames": 20,
+      "min_track_frames_说明": "轨迹长度门槛（帧）。证据太少的轨迹不能当主目标 —— v2615 的影子轨迹只有 5 帧检测，真运动员轨迹 122 帧。不足时按 帧数/门槛 线性打折。",
+      "penalty_edge": 0.35,
+      "penalty_edge_说明": "轨迹里贴边帧占比对应的最大打折比例。拍摄者本人和他拖在画面里的影子，框会长时间贴住画面底边/左边缘。",
+      "penalty_short": 0.3,
+      "penalty_short_说明": "轨迹里框不合格（太矮/太窄/太宽）帧占比对应的最大打折比例。",
+      "sam2_supervise_sec": 1.0,
+      "sam2_supervise_说明": "SAM2 只负责补检测器漏检的短空档。连续这么久（秒）SAM2 的框没有任何检测框与之 IoU 对齐，就判定跟丢：这几帧标 track_only / none，不画骨架，然后重新找人。和现有切段规则（缺口 ≤ 0.5 s）同一思路。",
+      "sam2_iou_min": 0.1,
+      "sam2_iou_说明": "SAM2 框与同帧检测框的 IoU 达到这个值才算「被检测器印证」。",
+      "suspect_mean_conf": 0.55,
+      "suspect_detect_pct": 20.0,
+      "suspect_说明": "目标可疑自检阈值（Mac 侧现行值）。关键点平均置信低于 conf，或检测器确认帧占比低于 pct%，就标 target_suspect=true。命中的视频照常出结果，但汇报和交付清单里必须标出来，不能算合格交付。",
+      "weight_duration": 0.2,
+      "weight_duration_说明": "时长占比这一项的权重（原 0.10）。2026-11-24 v2615：短片段（29 帧）靠 motion/region 就能冲到第一，提到 0.20 后 211 帧的真运动员轨迹才排第一；网格搜索（tests/grid_lock.py）验证 0.20/0.30 都能锁对且其余 20 条轨迹索引不变。",
+      "min_track_ratio": 0.1,
+      "min_track_ratio_说明": "轨迹长度门槛的第二个约束：至少占全片帧数的这个比例。和 min_track_frames 取小值，避免短片被固定门槛卡死。",
+      "sam2_drift_ratio": 3.0,
+      "sam2_drift_ratio_说明": "连续 SAM2 帧里，框中心累计位移超过「起始框高 × 这个倍数」就判跟丢。正常补缺框基本不动；跟丢时框会持续往一个方向滑。实测：v2615 漂移 597% 起始框高（真跟丢）；v2606 14%、v2617 44%、v2629 21%（正常补缺）。",
+      "sam2_supervise_sec_说明": "只对长度 ≥ 这个秒数的连续 SAM2 段做漂移判定。短段（几帧）来不及漂移，跳过以免误伤。"
+    }
+  },
+  "m2_pose2d": {
+    "_说明": "RTMPose-X Halpe26 逐帧 2D。倒立/大幅倾斜时旋转重识别。",
+    "rot_retry": {
+      "enabled": true,
+      "conf_min": 0.55,
+      "tilt_deg": 50.0,
+      "angles": [
+        90,
+        180,
+        270
+      ]
+    }
+  },
+  "m3_gemx": {
+    "_说明": "GEM-X 按段推理。相机模式按机位类型自动选；失败时标不可信，不悄悄兜底。",
+    "pad_frames": 10,
+    "max_segment_sec": 8.0,
+    "camera_policy": {
+      "tripod": "static",
+      "handheld": "background",
+      "on_failure": "mark_untrusted"
+    }
+  },
+  "m3f_fusion": {
+    "_说明": "骨架融合：GEM-X 投影 + 逐帧 2D 校正。参数对应方案 2.2（第三轮修订）。",
+    "conf_min": 0.6,
+    "max_dist_body_ratio": 0.08,
+    "smooth_window_sec": 0.2,
+    "long_lpf_sec": 0.8,
+    "final_smooth": {
+      "_说明": "最终残差平滑（可选）：对 (final - GEM原始投影) 再做段内平滑。已由 light_smooth 覆盖，默认关闭。",
+      "enabled": false,
+      "window_sec": 0.2
+    },
+    "light_smooth": {
+      "_说明": "轻量整体平滑：和 v2 同力度（30fps 下 3 帧加权平均，核 [0.25,0.5,0.25]）。v2 输出前做过同样的事，这是它 spike_pct 特别低的原因。平滑的是整个骨架（不只手残差），因为 spike 来自 GEM 原始投影的高频部分。",
+      "enabled": true,
+      "window_frames": 3
+    },
+    "jump_threshold_body_ratio": 0.15,
+    "max_resid_gap_sec": 0.5,
+    "window_overlap_sec": 1.0,
+    "bone_len_tolerance": 0.3,
+    "reliability": {
+      "_说明": "2D 可靠性门限（按验收报告规格，不是我自定的 25%）。",
+      "time_continuity_ratio": 0.08,
+      "two_model_agree_ratio": 0.05,
+      "gem_obs_conf_min": 0.3
+    },
+    "quality_gate": {
+      "_说明": "融合后的通用质量门：任何一帧只要有一根骨头长于当帧框高的 max_bone_ratio，就降为 track_only 并记录 bad_projection。适用于全部视频全部帧，不含视频编号分支。",
+      "enabled": true,
+      "max_bone_ratio": 0.6,
+      "downgrade_to": "track_only",
+      "reason": "bad_projection",
+      "warn_ratio_of_skeleton": 0.01
+    },
+    "jitter_gate": {
+      "_说明": "逐关节抖动门控：融合后某关节的加速度 p95 超过原始投影的 max_jitter_ratio 倍时，该关节退回原始投影。注意：整关节退回会把 2D 校正也一起关掉（第四轮实测导致校正量降到 0.02%），所以默认关闭，改用 long_lpf_sec 长窗低通来抑制抖动。",
+      "enabled": false,
+      "max_jitter_ratio": 1.0
+    },
+    "rigid_align": {
+      "_说明": "整体对齐（平移+缩放+旋转）的合理性门限",
+      "scale_min": 0.6,
+      "scale_max": 1.6,
+      "max_rotate_deg": 35.0,
+      "min_points": 3
+    },
+    "swap": {
+      "_说明": "左右互换判定：把左右对调后离投影更近，判为互换。",
+      "enabled": true,
+      "swap_ratio": 0.85
+    }
+  },
+  "m4_ski": {
+    "_说明": "P2 雪板模块。主路线 = 脚部几何法（不用 SAM2 分割）；SAM2 只作可选的形状票和板长参考。全部视频共用同一套规则，代码里不出现视频编号。",
+    "_方案": "2026-11-20 路线调整：双板方向 = 脚跟→大脚趾；单板方向 = 两脚连线；单双板两票 = 站姿（脚方向 vs 滑行方向）+ 形状（SAM2 可选）；板长按身高比例固定画。",
+    "geometric": {
+      "_说明": "脚部几何法参数（主路线）。",
+      "conf_min": 0.35,
+      "low_conf_below": 0.55,
+      "min_board_span_px": 8.0,
+      "smooth_window_frames": 3,
+      "travel_min_body_ratio": 0.05,
+      "board_len_body_ratio": {
+        "_说明": "板长按身高的比例换算像素。双板约 1.7m、单板约 1.5m；身高取 body_height_px_median（框高中位），约等于人身高。",
+        "double": 1.0,
+        "single": 0.9
+      }
+    },
+    "sam2_shape_vote": {
+      "_说明": "SAM2 分割只作形状票和板长参考，限时试一轮，不卡验收。分不出来就弃权。",
+      "enabled": true,
+      "short_side": 720,
+      "re_prompt_every": 3,
+      "min_ratio_for_double": 3.0
+    },
+    "shape_score": {
+      "_说明": "形状票打分（长宽比，不硬卡）。",
+      "ratio_low": 2.0,
+      "ratio_high": 5.0,
+      "ratio_full": 7.0,
+      "score_low": 0.15,
+      "score_high": 0.65,
+      "score_full": 1.0
+    },
+    "direction": {
+      "_说明": "板头朝向：双板 = 该脚脚跟→大脚趾（板头=脚尖侧）；单板 = 两脚连线（板头=前脚侧）。",
+      "double": "heel_to_bigtoe",
+      "single": "foot_span",
+      "fallback": "travel_displacement"
+    },
+    "sport_vote": {
+      "_说明": "单双板两票表决。站姿票 = 脚方向 vs 滑行方向（骨盆移动方向）：双板接近平行（< parallel_deg），单板接近垂直（> perpendicular_deg）。形状票 = SAM2 结果，分不出来则弃权。两票不一致或证据不足 → 「不确定」，验收时算错。",
+      "stance": {
+        "parallel_deg": 30.0,
+        "perpendicular_deg": 60.0
+      },
+      "aggregate": {
+        "min_valid_frames": 10,
+        "vote_ratio_threshold": 0.6
+      },
+      "uncertain_label": "不确定"
+    },
+    "visibility": {
+      "_说明": "可见性：置信度低于 conf_min → visible=false，不硬给坐标（符合「做不到就如实标」）。",
+      "conf_min": 0.35
+    },
+    "render": {
+      "_说明": "雪板叠加：蓝色细线（style.json 的 ski_2d）。",
+      "line_px_per_720": 2.4,
+      "tip_marker_radius_per_720": 4.0
+    }
+  },
+  "m8_render": {
+    "_说明": "火柴人叠加视频。颜色来自 configs/style.json。**产出视频的格式跟随原片**：HDR 原片出 HDR 主版本 + SDR 分享版；普通原片只出 SDR 一份。",
+    "line_px_per_720": 2.4,
+    "halo_extra_px": 2.0,
+    "joint_radius_per_720": 3.0,
+    "gem_alpha": 0.6,
+    "crf": 20,
+    "color": {
+      "_说明": "输出视频色彩策略（按源片 color_transfer 自动分流）。为什么之前看着过曝：原片带 bt2020/arib-std-b67 标签，播放器按 HDR 显示才好看；旧版重编码成 8bit 且丢标签 → 播放器把 HLG 信号当普通视频显示，亮部挤到接近纯白、颜色变淡（雪地全是亮部，所以显得过曝发灰）。",
+      "sdr": {
+        "versions": [
+          "overlay.mp4"
+        ],
+        "codec": "libx264",
+        "pix_fmt": "yuv420p",
+        "tag_primaries": "bt709",
+        "tag_trc": "bt709",
+        "tag_colorspace": "bt709",
+        "tag_range": "tv"
+      },
+      "hlg": {
+        "versions": [
+          "overlay.mp4",
+          "overlay_sdr.mp4"
+        ],
+        "main": {
+          "codec": "libx265",
+          "pix_fmt": "yuv420p10le",
+          "tag": "hvc1",
+          "crf": 18,
+          "preset": "medium",
+          "tag_primaries": "bt2020",
+          "tag_trc": "arib-std-b67",
+          "tag_colorspace": "bt2020nc",
+          "tag_range": "tv"
+        },
+        "sdr_share": {
+          "_说明": "分享版：HDR 视频在不认色彩标签的播放器上会发灰、没 HEVC 的设备放不了、发微信等平台常被转坏。所以额外出一份任何设备都能看的 SDR。",
+          "codec": "libx264",
+          "pix_fmt": "yuv420p",
+          "crf": 21,
+          "maxrate": "12M",
+          "bufsize": "24M",
+          "tonemap": "hable",
+          "npl": 203,
+          "_参数说明": "v3（Mac 侧 2026-11-23 实测，以苹果系统 HDR→普通视频转换为参考）：hable + npl=203（HLG 标准参考白，ITU-R BT.2408），与参考色差 ΔE 5.7（旧 mobius+npl=1000 是 21.7），亮度 150–158（参考约 155；旧参数 132–138 偏暗发灰）。",
+          "tag_primaries": "bt709",
+          "tag_trc": "bt709",
+          "tag_colorspace": "bt709",
+          "tag_range": "tv"
+        }
+      },
+      "pq": {
+        "_说明": "PQ 同 HLG 规则；另需注意 PQ 进模型前必须先色调映射（不向下兼容）。现有素材里没有 PQ，规则保留。",
+        "versions": [
+          "overlay.mp4",
+          "overlay_sdr.mp4"
+        ],
+        "main": {
+          "codec": "libx265",
+          "pix_fmt": "yuv420p10le",
+          "tag": "hvc1",
+          "crf": 18,
+          "preset": "medium",
+          "tag_primaries": "bt2020",
+          "tag_trc": "smpte2084",
+          "tag_colorspace": "bt2020nc",
+          "tag_range": "tv"
+        },
+        "sdr_share": {
+          "codec": "libx264",
+          "pix_fmt": "yuv420p",
+          "crf": 21,
+          "maxrate": "12M",
+          "bufsize": "24M",
+          "tonemap": "hable",
+          "npl": 203,
+          "tag_primaries": "bt709",
+          "tag_trc": "bt709",
+          "tag_colorspace": "bt709",
+          "tag_range": "tv"
+        }
+      },
+      "skeleton_on_hdr": {
+        "_说明": "HDR 底图上骨架线的信号值。实测源片解码后帧均值≈68%（雪地本身就很亮），骨架若按 HLG 参考白 75% 写会几乎看不见；按满值写才有足够对比。",
+        "white_signal": 0.97,
+        "halo_floor_signal": 0.03
+      }
+    }
+  },
+  "m5_cog": {
+    "_说明": "P3 T3.1 重心与轴线。优先 SOMA 网格体积重心；无网格用关节 + Dempster 分段质量。",
+    "method": "joints_dempster",
+    "smooth_window_sec": 0.2,
+    "body_height_m": 1.7,
+    "gravity_m_per_s2": 9.8,
+    "spin_axis_min_deg_s": 90.0,
+    "air_correction": {
+      "_说明": "空中重心物理矫正。用滞空时间 T 反推 v0，按抛物线重算竖直位置。画面像素与米换算用 body_height_m / body_height_px。",
+      "enabled": true,
+      "skip_when_ld_invisible": true
+    }
+  },
+  "m6_rotation": {
+    "_说明": "P3 T3.2 转动分解与动作标签。从 TO-0.4s 到 LD（LD 不可见则到最后可见帧），把骨盆朝向角速度分解到竖直/横/滑行轴。",
+    "pre_window_sec": 0.6,
+    "axes": {
+      "_说明": "按 Mac 侧 2026-11-20 新定义：竖直轴 = 世界的上方向；横轴 = 起跳前 hip_window_sec 内骨盆左右方向（左髋→右髋）的平均，去掉竖直分量；滑行轴 = 竖直轴 × 横轴。不再用骨盆平移方向（GEM-X 世界平移量太小不可靠）。",
+      "vertical": "gravity_up",
+      "lateral": "hip_left_to_right_pre_takeoff",
+      "travel": "vertical_cross_lateral",
+      "hip_window_sec": 0.5
+    },
+    "label": {
+      "_说明": "动作标签规则。转动度数四舍五入到 180 的倍数。",
+      "round_deg": 180,
+      "jump_threshold_deg": 90,
+      "flip_ratio_threshold": 0.4,
+      "cork_tilt_deg": 30.0
+    },
+    "low_confidence_when_camera_untrusted": true,
+    "far_target_body_ratio": 0.15,
+    "_low_confidence_说明": "低可信规则（通用，不含视频编号）：(a) 目标身高中位 / 画面短边 < far_target_body_ratio → 远景小目标；(b) 单板侧站 → 滑行轴定义待专项；(c) LD_visible=false → 窗口不完整；(d) 窗口内倒立帧 → 朝向不可靠；(e) camera_trusted=false。任一命中即 low，原因写进 confidence_reasons。",
+    "post_window_sec": 0.1,
+    "_window_说明": "窗口 = 起跳前 pre_window_sec → 落地后 post_window_sec。LD 不可见时，终点用最后一帧有 3D 数据的帧（不提前截断）。",
+    "method": "frame_by_frame_integration",
+    "_method_说明": "逐帧积分：ΔR = R[t+1]·R[t]ᵀ 转轴角向量，投影到三个固定轴带符号累加。不用「首尾净旋转」（360° 动作首尾朝向相同，净旋转接近 0）。"
+  }
+}

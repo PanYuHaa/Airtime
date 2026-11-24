@@ -1,0 +1,11 @@
+{
+  "_说明": "视频清单。把视频放到 data/videos/，然后在下面登记。id 是自定义名字，file 是文件名。也可以不写这个文件——只给一个视频时 Airtime 会自动识别。",
+  "videos": [
+    {
+      "id": "my_ski_1",
+      "file": "my_ski_1.mp4",
+      "camera": "handheld",
+      "target_hint": null
+    }
+  ]
+}
