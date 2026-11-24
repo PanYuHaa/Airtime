@@ -11,7 +11,21 @@ requires-python = ">=3.10"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "PanYuHaa" }]
-keywords = ["pose-estimation", "ski", "3d-reconstruction", "sports-analysis", "computer-vision"]
+keywords = [
+    "pose-estimation", "3d-reconstruction", "ski", "freestyle-ski",
+    "sports-analysis", "computer-vision",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
 
 dependencies = [
     "numpy>=1.24",
@@ -21,7 +35,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# GEM-X 三维重建需要（按官网安装 CUDA 版 torch）
+# 三维重建需要（按官方说明安装 CUDA 版 torch）
 gemx = ["torch>=2.0", "torchvision"]
 dev = ["pytest>=7", "ruff"]
 
@@ -31,6 +45,7 @@ airtime-check = "airtime.cfg:main"
 
 [project.urls]
 Homepage = "https://github.com/PanYuHaa/Airtime"
+Issues = "https://github.com/PanYuHaa/Airtime/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P1 T1.3 逐帧 2D（RTMPose-X Halpe26）
+逐帧 2D（RTMPose-X Halpe26）
 
 要求：
   - 只在 skeleton 段上跑
@@ -95,7 +95,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pkg", default="")
     ap.add_argument("--track", default="")
-    ap.add_argument("--out", default=str(Path.home() / "P1v2_out"))
+    ap.add_argument("--out", default=str(Path.home() / "output_out"))
     ap.add_argument("--only", default="")
     ap.add_argument("--device", default="cuda")
     a = ap.parse_args()
@@ -106,7 +106,7 @@ def main():
 
     from rtmlib import RTMPose
 
-    # 确定性：必须在建 RTMPose 之前打补丁（理由同 M1，见 p1_t12_track.py）
+    # 确定性：必须在建 RTMPose 之前打补丁（理由同 M1，见 m1_track.py）
     # DET 已在模块顶部导入
     DET.patch_rtmlib(verbose=False)
 

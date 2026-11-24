@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P1 T1.4 GEM-X 按段推理
+GEM-X 按段推理
 
 要求：
   - 每个 skeleton 段单独跑一次
@@ -151,7 +151,7 @@ def run_gemx_segment(clip, bbx, pt_out, gem, camera_mode="background"):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pkg", default="")
-    ap.add_argument("--out", default=str(Path.home() / "P1v2_out"))
+    ap.add_argument("--out", default=str(Path.home() / "output_out"))
     ap.add_argument("--gem", default=str(Path.home() / "GEM-X"))
     ap.add_argument("--only", default="")
     a = ap.parse_args()

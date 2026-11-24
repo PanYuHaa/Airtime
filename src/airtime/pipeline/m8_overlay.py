@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P1 T1.6 骨架叠加视频（从 skeleton.json 画，不画 kp2d_proj / kp2d_obs）
+骨架叠加视频（从 skeleton.json 画，不画 kp2d_proj / kp2d_obs）
 
 样式按 configs/style.json：
   - 左白 #FFFFFF、右冷灰 #A7B0BC
@@ -19,7 +19,7 @@ import numpy as np
 # SOMA 骨骼连线（26 关节，**大写名，和 skeleton.json 的 joint_names 一致**）
 # 2026-11-20 修复：原版用小写名（hips/spine1/l_arm…），
 # 但 skeleton.json 输出的是 SOMA 大写名（Hips/Spine1/LeftArm…），
-# 导致 joints.get() 全部返回 None，一条线都没画出来（Mac 侧验收发现）。
+# 导致 joints.get() 全部返回 None，一条线都没画出来（参考验收发现）。
 BONES = [
     ("Hips", "Spine1", "center"), ("Spine1", "Spine2", "center"),
     ("Spine2", "Chest", "center"), ("Chest", "Neck1", "center"),
@@ -65,7 +65,7 @@ def blend_color(base, alpha, bg):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pkg", default="")
-    ap.add_argument("--out", default=str(Path.home() / "P1v2_out"))
+    ap.add_argument("--out", default=str(Path.home() / "output_out"))
     ap.add_argument("--only", default="")
     a = ap.parse_args()
     if not a.pkg:

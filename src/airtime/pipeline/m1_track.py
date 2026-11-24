@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-P1 T1.2 跟踪（通用修法版）
+跟踪（通用修法版）
 
-按方案「〇·五 工程原则」：
+按工程原则：
   - 目标锁定用通用规则（自动打分 + target_hint 标准输入），不含视频编号分支
   - 切段写成函数：段内只能是连续 skeleton，坏帧 > 15 帧断开
   - 相机模式统一策略（三脚架 static，移动 background）
@@ -45,7 +45,7 @@ def detect_all(video, score_thr=0.15):
     from rtmlib import YOLOX
     # 确定性：必须在建 YOLOX 之前打补丁，否则会话已经按默认（非确定）配置建好。
     # 实测同一段两个独立进程跑，boxes 最大差 0.0126 px、kpts 0.537 px；
-    # 打补丁后跨进程 bit-identical（见 tests/run_det_xproc_det.sh）。
+    # 打补丁后跨进程 bit-identical（见 跨进程验证）。
     # DET 已在模块顶部导入
     DET.patch_rtmlib(verbose=False)
     det = YOLOX(
@@ -70,7 +70,7 @@ def sam2_fill(video, seed_k, seed_box, W, H):
     """SAM2 从种子传播，返回 {frame_idx: box}
 
     只用单个种子（框最大的那一帧）向前后传播。
-    试过在缺口段额外播种，会误把「路人」当主体补进来（v2606 帧 347-349），
+    试过在缺口段额外播种，会误把「路人」当主体补进来（某条素材的 347-349 帧），
     已回退 —— 详见 process() 里的说明。
     """
     import shutil
@@ -244,13 +244,13 @@ def process(vid, video, meta, config):
                  for k in range(n)]
         # 起点必须合格：只能是检测器给出的完整人体框。
         #
-        # v2615 的种子曾是 [0,1455,9,1630] —— 9px 宽、贴左边缘的残片，
+        # 这条素材的种子曾是 [0,1455,9,1630] —— 9px 宽、贴左边缘的残片，
         # SAM2 从那里起跟，一路滑到拍摄者的影子上。
         #
         # 但「不合格就整段跳过」是个更糟的做法（2026-11-24 被 Mac 抓到）：
         # 原来只取「框最大的一帧」当种子，而框最大的往往正好是贴边的近景帧
-        # （v2617 帧 3 贴底、v2629 帧 230 贴底），于是整条视频的 SAM2 一次都没跑，
-        # 把 v2606 88 帧 / v2617 60 帧 / v2629 42 帧**正确**的补缺帧全丢了。
+        # （某条素材 帧 3 贴底、某条素材 帧 230 贴底），于是整条视频的 SAM2 一次都没跑，
+        # 把 多条素材的 88 / 60 / 42 帧**正确**的补缺帧全丢了。
         #
         # 现在改成：在所有**合格**的检测帧里挑框最大的那一帧当种子。
         # 合格 = 完整人体、不贴边（box_quality）。这样既不会从残片起跟，
@@ -273,7 +273,7 @@ def process(vid, video, meta, config):
             #
             # 曾经试过「在缺口段里额外播种」，想让 SAM2 把断掉的段接回来。
             # **已回退**，原因：缺口段里检测到的往往是**画面里的另一个人**
-            # （v2606 帧 347-349 检测框高 184px，是左边远处的小人；
+            # （某条素材的 347-349 帧 检测框高 184px，是左边远处的小人；
             #  主体是右边那个框高 1310px 的人）。
             # 用那个框额外播种，SAM2 就把「路人」补成骨架，
             # 结果是骨架率从 98.8% "提升"到 100%，
@@ -296,14 +296,14 @@ def process(vid, video, meta, config):
         print(f"  [3/4] 无需 SAM2 补缺", flush=True)
 
     # ---- SAM2 监督：长时间漂移就判跟丢（2026-11-24 加）----
-    # v2615 原状态：锁到拍摄者影子，SAM2 连续 450 帧（13 秒）没有任何检测
+    # 改动前状态：锁到拍摄者影子，SAM2 连续 450 帧（13 秒）没有任何检测
     # 印证，框从拍摄者身上一路滑到影子上 —— 完整/互换/撕裂三项照样全过，
     # 只有目视能看出锁错人。
     #
     # 判据经过两次修正，两个坑都记在这：
     #   坑 1「要求 SAM2 帧必须有检测印证」→ 把正常补缺全判成跟丢。
     #        SAM2 本来就是检测器漏检时才补，那些帧本来就该没有检测框。
-    #        实测 v2606 骨架帧从 405 掉到 318（误伤）。
+    #        实测 某条素材 骨架帧从 405 掉到 318（误伤）。
     #   坑 2「连续一段时间没有检测器确认」→ 仍会误伤长时间补缺的条子
     #        （video4/9/10/11 等 10 条统计都变了）。
     #
@@ -311,8 +311,8 @@ def process(vid, video, meta, config):
     # 漏检而已）；跟丢时框会持续往一个方向滑走。所以判据是
     #   「连续 sam2 帧里，框中心累计位移 > sam2_drift_ratio × 起始框高」
     # 实测（tests/drift_analysis.py）：
-    #   v2615 漂移 597% 起始框高、尺寸变化 7.5 倍  ← 真跟丢
-    #   v2606 漂移 14%、v2617 44%、v2629 21%       ← 正常补缺
+    #   跟丢时漂移 597% 起始框高、尺寸变化 7.5 倍  ← 真跟丢
+    #   某条素材 漂移 14%、某条素材 44%、某条素材 21%       ← 正常补缺
     sup_sec = _LOCK.get("sam2_supervise_sec", 1.0)
     sup_frames = max(1, int(sup_sec * FPS))
     drift_ratio = _LOCK.get("sam2_drift_ratio", 3.0)
@@ -448,7 +448,7 @@ def finish(vid, meta, boxes, sources, status, segs, lock_info, is_tripod, t0,
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pkg", default="")
-    ap.add_argument("--out", default=str(Path.home() / "P1v2_out"))
+    ap.add_argument("--out", default=str(Path.home() / "output_out"))
     ap.add_argument("--only", default="")
     a = ap.parse_args()
     if not a.pkg:

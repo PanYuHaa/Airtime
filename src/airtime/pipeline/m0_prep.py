@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-P1 T1.1 预处理 v2（修正旋转与尺寸）
+预处理 v2（修正旋转与尺寸）
 
 关键修正：
   1. **不再手动 transpose**：ffmpeg 默认按 rotation 元数据自动转正，显式 transpose 会叠加两次
@@ -17,15 +17,35 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from .. import cfg as CFG
 from ..cfg import CONFIGS_DIR, DATA_DIR, OUTPUT_DIR
 
 PROJ = CONFIGS_DIR.parent
 VIDEOS = DATA_DIR / "videos"
 OUT = OUTPUT_DIR / "pkg"
-CFG = None  # 惰性加载，见 _videos_cfg()
 
 TARGET_FPS = 30
 SHORT_SIDE = 1080
+
+VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".avi", ".mkv"}
+
+
+def _videos_cfg() -> dict:
+    """惰性读视频清单：没配也不该在 import 时炸掉。"""
+    try:
+        return CFG.load_videos_config()
+    except FileNotFoundError:
+        return {}
+
+
+def _auto_list(videos_dir: Path) -> list:
+    """没给清单时，按目录里实际存在的视频自动生成。"""
+    items = []
+    if videos_dir.is_dir():
+        for q in sorted(videos_dir.iterdir()):
+            if q.suffix.lower() in VIDEO_EXTS:
+                items.append({"id": q.stem, "file": q.name})
+    return items
 
 
 def probe(path):
@@ -107,9 +127,12 @@ def main():
     out = Path(a.out)
     if a.list:
         list_doc = json.load(open(a.list, encoding="utf-8"))
-        cfg = list_doc if isinstance(list_doc, dict) else {"videos": list_doc}
+        vcfg = list_doc if isinstance(list_doc, dict) else {"videos": list_doc}
     else:
-        cfg = CFG
+        # 没给 --list 时读仓库配置；再没有就按目录里实际视频自动建清单
+        vcfg = _videos_cfg()
+        if not vcfg.get("videos"):
+            vcfg = {"videos": _auto_list(videos_dir)}
 
     only = [x for x in a.only.split(",") if x]
     (out / "clips").mkdir(parents=True, exist_ok=True)
@@ -117,7 +140,7 @@ def main():
 
     index = {}
 
-    for v in cfg["videos"]:
+    for v in vcfg["videos"]:
         vid = v["id"]
         if only and vid not in only:
             continue
@@ -145,7 +168,7 @@ def main():
         # 如果直接 `format=yuv420p` 转 8bit，等于把 HDR 数据当 SDR 用 ——
         # 结果是一大片灰白的雪、人物轮廓糊掉，看不清。
         # 【2026-11-23 定稿】给模型的输入**保持现状，不做色调映射**。
-        # Mac 侧实测 3 条 HLG（IMG_2617 / IMG_2606 / IMG_2451，各约 40 帧，
+        # 参考实测 3 条 HLG（IMG_2617 / IMG_2606 / IMG_2451，各约 40 帧，
         # 跑 YOLOX + RTMPose-X）：
         #   A 不做映射(现状)  关键点置信度 0.794 / 0.665 / 0.769
         #   C 只换原色+矩阵    0.763 / 0.672 / 0.760
@@ -158,7 +181,7 @@ def main():
         # 已验收的 12 条（其中 5 条也是 HLG）就是按不做映射跑通的，不受影响。
         #
         # 「人看着发灰/过曝」是**播放器显示**的问题（重编码丢了色彩标签），
-        # 已在渲染层解决：见 p1_t16_overlay_hdr.py（产出视频跟随原片格式）。
+        # 已在渲染层解决：见 m8_overlay.py（产出视频跟随原片格式）。
         #
         # 但 PQ(smpte2084) 不同 —— 它不向下兼容，当普通视频看是错的，
         # 必须先色调映射再进模型。现有素材里没有 PQ，规则保留。
