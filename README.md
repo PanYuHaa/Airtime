@@ -257,6 +257,23 @@ python -m airtime.pipeline.m8_overlay --pkg runs/demo
 
 各阶段的 `--help` 有完整参数说明。
 
+### 典型耗时
+
+测试环境：RTX 4070 SUPER 12GB / WSL2，23 段 720p 素材（共 143 秒），
+统一转成 1080p30 后处理：
+
+| 阶段 | 23 段总耗时 | 说明 |
+|---|---|---|
+| M0 预处理 | ~15 min | 720p→1080p 转码占大头 |
+| M1 跟踪 | ~2.5 min | YOLOX 检测 |
+| M2 2D 关键点 | ~1.2 min | RTMPose-x |
+| **M3 GEM-X** | **~19 min** | 最慢，单段 17–55 秒 |
+| M3F 融合 | ~4 s | 纯 CPU 后处理 |
+| M8 叠加 | ~1.4 min | |
+| **合计** | **约 30 min** | |
+
+单条 4K 137 帧素材（M0+M1+M2）约 32 秒，其中 M0 转码占 23 秒。
+
 ---
 
 ## 配置
@@ -341,12 +358,14 @@ Airtime/
 │   ├── cfg.py              配置与路径解析
 │   ├── run.py              一键入口
 │   ├── m1_lock.py          M1 目标锁定打分
+│   ├── det_deterministic.py 确定性推理补丁
 │   └── pipeline/
 │       ├── m0_prep.py      预处理
 │       ├── m1_track.py     跟踪
 │       ├── m2_pose2d.py    2D 关键点
-│       ├── m3_gemx.py      3D 重建
-│       ├── m3_export.py    GEM-X 输出导出
+│       ├── m3_gemx.py      3D 重建调度（按段切分、跨进程调用）
+│       ├── m3_run_gemx.py  ★ 在 GEM-X 环境里实际跑推理
+│       ├── m3_export.py    GEM-X 输出 → npz
 │       ├── m3f_fuse.py     2D/3D 融合
 │       └── m8_overlay.py   叠加可视化
 ├── configs/
@@ -357,6 +376,15 @@ Airtime/
 ├── data/                   输入视频（不入库）
 └── runs/                   输出（不入库）
 ```
+
+### 为什么 M3 拆成两个文件
+
+`m3_gemx.py` 在主流程环境里跑（复制视频、准备 bbox、切窗口），
+`m3_run_gemx.py` 在 GEM-X 的独立环境里跑（真正加载 torch 模型）。
+
+原因：主流程依赖 onnxruntime（轻量），GEM-X 依赖 torch + CUDA（重）；
+两者装在一个环境里容易冲突。所以 M3 阶段通过 subprocess 跨进程调用，
+由环境变量 `AIRTIME_GEMX_PYTHON` 指定用哪个解释器。
 
 ---
 
