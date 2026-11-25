@@ -32,7 +32,8 @@ PIPELINE_DIR = Path(__file__).resolve().parent / "pipeline"
 
 def _run_stage(script: str, args: list[str]) -> int:
     """在子进程里跑一个阶段，返回退出码。"""
-    cmd = [sys.executable, str(PIPELINE_DIR / script), *args]
+    mod = f"airtime.pipeline.{Path(script).stem}"
+    cmd = [sys.executable, "-m", mod, *args]
     print(f"\n{'=' * 70}\n  {script}\n{'=' * 70}")
     return subprocess.call(cmd)
 

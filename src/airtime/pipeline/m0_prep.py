@@ -44,7 +44,7 @@ def _auto_list(videos_dir: Path) -> list:
     if videos_dir.is_dir():
         for q in sorted(videos_dir.iterdir()):
             if q.suffix.lower() in VIDEO_EXTS:
-                items.append({"id": q.stem, "file": q.name})
+                items.append({"id": q.stem, "file": q.name, "camera": "handheld"})
     return items
 
 
@@ -154,8 +154,9 @@ def main():
         meta_p = out / "meta" / f"{vid}.json"
         _t_vid = time.time()
 
+        camera = v.get("camera", "handheld")
         print(f"\n{'='*74}", flush=True)
-        print(f"  {vid}: {v['file']} [{v['camera']}]", flush=True)
+        print(f"  {vid}: {v['file']} [{camera}]", flush=True)
         print(f"{'='*74}", flush=True)
 
         info = probe(src)
@@ -257,7 +258,7 @@ def main():
 
         meta = {
             "video": vid, "file": v["file"],
-            "camera": v["camera"], "static_cam": v["camera"] == "tripod",
+            "camera": camera, "static_cam": camera == "tripod",
             "sport": v.get("sport"),        # 产品 ① 不需要，缺省 None
             "rotation_deg": info["rotation"],
             "coded_size": [info["coded_w"], info["coded_h"]],

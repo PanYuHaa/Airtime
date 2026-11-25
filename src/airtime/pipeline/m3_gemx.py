@@ -93,10 +93,11 @@ def run_gemx_segment(clip, bbx, pt_out, gem, camera_mode="background"):
     return pt_out
 
 def main():
+    from .. import cfg as CFG
     ap = argparse.ArgumentParser()
     ap.add_argument("--pkg", default="")
-    ap.add_argument("--out", default=str(Path.home() / "output_out"))
-    ap.add_argument("--gem", default=str(Path.home() / "GEM-X"))
+    ap.add_argument("--out", default=str(CFG.OUTPUT_DIR / "default"))
+    ap.add_argument("--gem", default=str(CFG.GEMX_DIR))
     ap.add_argument("--only", default="")
     a = ap.parse_args()
     if not a.pkg:
@@ -105,7 +106,6 @@ def main():
     # 参数从 configs/pipeline.json 读（工程原则）
     import sys as _sys
     _sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from .. import cfg as CFG
     _g = CFG.load_pipeline_config()["m3_gemx"]
     global PAD
     PAD = _g["pad_frames"]
