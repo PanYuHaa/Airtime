@@ -9,6 +9,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![CUDA](https://img.shields.io/badge/CUDA-11.8%2B-76B900.svg)](https://developer.nvidia.com/cuda-toolkit)
+[![CI](https://github.com/PanYuHaa/Airtime/actions/workflows/ci.yml/badge.svg)](https://github.com/PanYuHaa/Airtime/actions/workflows/ci.yml)
 
 </div>
 
@@ -354,14 +355,18 @@ Halpe26 的 `nose` 和 `head` 都曾被映射到 SOMA 的 `HeadEnd`。
 
 ```
 Airtime/
+├── .github/                CI 工作流与 Issue/PR 模板
 ├── src/airtime/
 │   ├── cfg.py              配置与路径解析
-│   ├── run.py              一键入口
+│   ├── run.py              一键入口 (`airtime`)
+│   ├── eval.py             基准评测、回归对比与目检拼图 (`airtime-eval`)
+│   ├── time_contract.py    精确时序契约（PTS / VFR / 慢放物理时间）
 │   ├── m1_lock.py          M1 目标锁定打分
 │   ├── det_deterministic.py 确定性推理补丁
 │   └── pipeline/
 │       ├── m0_prep.py      预处理
-│       ├── m1_track.py     跟踪
+│       ├── m1_track.py     跟踪调度
+│       ├── m1_run_sam2.py  ★ 在 torch 环境里跑 SAM2 分割补帧
 │       ├── m2_pose2d.py    2D 关键点
 │       ├── m3_gemx.py      3D 重建调度（按段切分、跨进程调用）
 │       ├── m3_run_gemx.py  ★ 在 GEM-X 环境里实际跑推理
@@ -372,9 +377,29 @@ Airtime/
 │   ├── pipeline.json       主配置（门限都在这里）
 │   ├── style.json          可视化样式
 │   └── joint_names.json    SOMA 77 关节定义
+├── docs/                   架构设计、数据契约、开发规范与 ADR
+├── scripts/                配置校验与工程辅助脚本
+├── tests/                  自动化单元测试套件
 ├── models/                 模型权重（不入库）
 ├── data/                   输入视频（不入库）
 └── runs/                   输出（不入库）
+```
+
+### 工程文档与验证
+
+- 系统架构：[docs/architecture.md](docs/architecture.md)
+- 数据契约：[docs/data-schema.md](docs/data-schema.md)
+- 开发指南：[docs/development.md](docs/development.md)
+- 架构决策记录（ADR）：[docs/adr/](docs/adr/)
+- 贡献规范：[CONTRIBUTING.md](CONTRIBUTING.md) · 变更日志：[CHANGELOG.md](CHANGELOG.md)
+
+```bash
+# 本地校验配置、代码规范与单元测试
+make check
+
+# 单次运行评测 / 改动前后回归对比
+airtime-eval runs/demo
+airtime-eval --before runs/base --after runs/exp --md runs/compare.md
 ```
 
 ### 为什么 M3 拆成两个文件

@@ -10,7 +10,6 @@
 """
 import json
 import subprocess
-import sys
 import time
 from pathlib import Path
 
@@ -220,9 +219,9 @@ def main():
             if r.returncode != 0:
                 print(f"  x 转码失败: {r.stderr[-300:]}", flush=True)
                 continue
-            print(f"  ✓ 转码", flush=True)
+            print("  ✓ 转码", flush=True)
         else:
-            print(f"  -- 已存在", flush=True)
+            print("  -- 已存在", flush=True)
 
         # 实测输出尺寸
         cap = cv2.VideoCapture(str(dst))
@@ -258,7 +257,7 @@ def main():
                 main = (0, on-1)
         else:
             main = (0, on-1)
-            print(f"  切分: 单镜头", flush=True)
+            print("  切分: 单镜头", flush=True)
 
         # 构建精确时序契约（源帧号 / PTS / VFR 检测 / 慢放倍率）
         slowmo = v.get("slowmo_factor") if v.get("slowmo_factor") is not None else a.slowmo_factor

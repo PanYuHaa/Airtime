@@ -32,8 +32,6 @@
 """
 import functools
 
-from . import det_deterministic as DET
-
 # 唯一需要的一项：不跑 cuDNN 基准搜索
 CUDA_OPTS = {"cudnn_conv_algo_search": "HEURISTIC"}
 

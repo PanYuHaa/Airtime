@@ -14,8 +14,6 @@ import argparse
 import json
 import os
 import subprocess
-import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -195,7 +193,7 @@ def main():
                 if not clip.exists():
                     info = crop_segment(video, ss, se, clip)
                     if info is None:
-                        print(f"    x 裁片失败", flush=True)
+                        print("    x 裁片失败", flush=True)
                         continue
                 else:
                     info = {"start": max(0, ss-PAD), "end": min(n-1, se+PAD)}
@@ -294,7 +292,7 @@ def main():
 
     # 汇总
     print(f"\n{'='*74}")
-    print(f"  完成")
+    print("  完成")
     print(f"{'='*74}")
     for vid in sorted(index):
         vd = out / "gem" / vid

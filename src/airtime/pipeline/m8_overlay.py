@@ -14,7 +14,6 @@ import time
 from pathlib import Path
 
 import cv2
-import numpy as np
 
 # SOMA 骨骼连线（26 关节，**大写名，和 skeleton.json 的 joint_names 一致**）
 # 2026-11-20 修复：原版用小写名（hips/spine1/l_arm…），

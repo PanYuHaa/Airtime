@@ -5,7 +5,6 @@ P1 M3：从 GEM-X .pt 导出为 npz（直接读文件，不依赖目录结构）
 复用 P0 的 export_gemx.py 逻辑，但接受明确的 .pt 路径。
 """
 import argparse
-import json
 from pathlib import Path
 
 import numpy as np

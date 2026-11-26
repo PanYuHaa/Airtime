@@ -15,13 +15,10 @@ M1 目标运动员锁定（v2：以「做动作」为主）
     - 可用帧数（框够大）
     - 出现时长
 """
-import sys
-from pathlib import Path
 
 import numpy as np
 
 from . import cfg as CFG
-
 
 _A = CFG.load_pipeline_config()["m1_track"]["assoc"]
 COST_MAX = _A["cost_max"]
@@ -42,7 +39,6 @@ def iou(a, b):
 def _assoc_cost(a, b, pred=None):
     """关联代价（0~1，越小越好）。速度预测 + 距离 + 尺寸。"""
     i = iou(a, b)
-    ca = ((a[0]+a[2])/2, (a[1]+a[3])/2)
     cb = ((b[0]+b[2])/2, (b[1]+b[3])/2)
     ha, hb = a[3]-a[1], b[3]-b[1]
     sz = max(ha, hb, 1.0)

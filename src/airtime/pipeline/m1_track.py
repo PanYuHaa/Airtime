@@ -24,8 +24,7 @@ import numpy as np
 from .. import cfg as CFG
 from .. import det_deterministic as DET
 from ..cfg import CONFIGS_DIR, SAM2_DIR, YOLOX_ONNX
-
-from ..m1_lock import box_quality, iou, lock_target
+from ..m1_lock import box_quality, lock_target
 
 # 全部参数从 configs/pipeline.json 读，代码里不硬编码（工程原则）
 _P = CFG.load_pipeline_config()
@@ -138,7 +137,6 @@ def build_status(boxes, sources, thr_h):
     出门：已经处于 skeleton 时，只要 框高 >= thr_h * (1 - HYS) 就继续保持
     sam2_lost 帧一律 track_only（跟丢的段不能画骨架，2026-11-24）
     """
-    n = len(boxes)
     HYS = _T.get("height_hysteresis", 0.10)   # 出门门限放宽 10%
     exit_h = thr_h * (1.0 - HYS)
     status = []
@@ -212,18 +210,18 @@ def process(vid, video, meta, config):
     print(f"{'='*74}", flush=True)
 
     t0 = time.time()
-    print(f"  [1/4] YOLOX 检测...", flush=True)
+    print("  [1/4] YOLOX 检测...", flush=True)
     all_dets, _, _ = detect_all(video)
     n_raw = sum(1 for d in all_dets if d)
     print(f"    有检测帧: {n_raw}/{n}", flush=True)
 
     # 目标锁定（通用规则 + target_hint）
-    print(f"  [2/4] 目标锁定（通用规则）...", flush=True)
+    print("  [2/4] 目标锁定（通用规则）...", flush=True)
     hint = config.get("target_hint")
     boxes, lock_info = lock_target(all_dets, W, H, FPS, thr_h,
                                    target_hint=hint, verbose=True)
     if lock_info["method"] == "none":
-        print(f"    x 无候选轨迹", flush=True)
+        print("    x 无候选轨迹", flush=True)
         sources = ["none"] * n
         status = ["none"] * n
         return finish(vid, meta, boxes, sources, status, [], lock_info,
@@ -255,7 +253,7 @@ def process(vid, video, meta, config):
                 if boxes[k] is not None
                 and box_quality(boxes[k], W, H, thr_h)[0]]
         if not cand:
-            print(f"  [3/4] 无合格种子帧，跳过 SAM2", flush=True)
+            print("  [3/4] 无合格种子帧，跳过 SAM2", flush=True)
             seed_k = None
         else:
             seed_k = max(cand, key=lambda k: areas[k])
@@ -289,7 +287,7 @@ def process(vid, video, meta, config):
             except Exception as e:
                 print(f"    x SAM2: {e}", flush=True)
     else:
-        print(f"  [3/4] 无需 SAM2 补缺", flush=True)
+        print("  [3/4] 无需 SAM2 补缺", flush=True)
 
     # ---- SAM2 监督：长时间漂移就判跟丢（2026-11-24 加）----
     # 改动前状态：锁到拍摄者影子，SAM2 连续 450 帧（13 秒）没有任何检测
@@ -371,7 +369,7 @@ def process(vid, video, meta, config):
     segs = split_segments(status, max_gap, MIN_SEG_FRAMES)
 
     from collections import Counter
-    print(f"\n  结果:", flush=True)
+    print("\n  结果:", flush=True)
     print(f"    来源: {dict(Counter(sources))}", flush=True)
     print(f"    状态: {dict(Counter(status))}", flush=True)
     print(f"    段: {len(segs)} 个", flush=True)

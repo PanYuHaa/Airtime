@@ -35,14 +35,13 @@ def main() -> int:
     gem = Path(a.gem).resolve()
     sys.path.insert(0, str(gem))
 
-    import torch  # noqa: E402
     import gem.inference.body_video as BV  # noqa: E402
+    import torch  # noqa: E402
+    from gem.common.detectors.tracks import TrackResult, smooth_boxes, square_crops  # noqa: E402
     from gem.inference.camera_motion import camera_angular_velocity  # noqa: E402
     from gem.inference.motion import load_predictor, run_motion  # noqa: E402
     from gem.inference.serialization import save_predictions, tensor_tree  # noqa: E402
     from gem.inference.video import VideoFrames, normalize_video  # noqa: E402
-    from gem.common.detectors.tracks import (  # noqa: E402
-        TrackResult, smooth_boxes, square_crops)
 
     # 确定性开关
     torch.use_deterministic_algorithms(True, warn_only=True)

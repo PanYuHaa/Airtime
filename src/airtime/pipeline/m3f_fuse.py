@@ -16,14 +16,12 @@
 import argparse
 import hashlib
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
 
 from .. import cfg as CFG
 from ..cfg import SOMA_JOINT_NAMES
-
 
 # ============================================================================
 # Halpe26
@@ -148,9 +146,7 @@ def rigid_fit_2d(src, dst, weights=None):
         # 去质心
         a = src - cs
         b = dst - cd
-        # 复表示最优旋转（Umeyama）
-        Sw = (w[:, None] * a * b).sum(0)   # [Σw ax bx, Σw ay by]
-        # 用复数法：sum(w * conj(a) * b)
+        # 复表示最优旋转（Umeyama）：sum(w * conj(a) * b)
         num = (w * (a[:, 0] * b[:, 0] + a[:, 1] * b[:, 1])).sum()
         num2 = (w * (a[:, 0] * b[:, 1] - a[:, 1] * b[:, 0])).sum()
         den = (w * (a ** 2).sum(1)).sum()
@@ -193,7 +189,6 @@ def smooth_in_segs(x, win, segs):
       - 段外：保持 0（残差在段外没有意义）
     """
     out = np.zeros_like(x)
-    half = win // 2
     for s0, e0 in segs:
         seg = x[s0:e0+1].astype(np.float64)
         L = len(seg)
@@ -466,7 +461,6 @@ def main():
         # ------------------------------------------------------------------
         # 第 3 步：**整体对齐**（平移+缩放+旋转）
         # ------------------------------------------------------------------
-        glob_align = np.zeros((n, 3), dtype=np.float32)   # s, theta, (tx,ty) 分开存
         glob_t = np.zeros((n, 2), dtype=np.float32)
         glob_s = np.ones(n, dtype=np.float32)
         glob_th = np.zeros(n, dtype=np.float32)
@@ -577,7 +571,6 @@ def main():
                 # 段首尾：从**段内**往外过渡（不是从最近端点）
                 for s0, e0 in segs:
                     # 段首之前（段内第一帧往前，但不越过上一段）
-                    prev_end = max([e for _, e in segs if e < s0], default=-1)
                     before = [i for i in idx if s0 <= i <= e0]
                     if not before:
                         continue
@@ -588,7 +581,6 @@ def main():
                         filled[kk] = v[first_valid] * t
                     # 段尾之后
                     last_valid = before[-1]
-                    next_start = min([s for s, _ in segs if s > e0], default=n)
                     for kk in range(last_valid+1, e0+1):
                         t = (e0 - kk + 1) / (e0 - last_valid + 1)
                         filled[kk] = v[last_valid] * t
@@ -653,7 +645,6 @@ def main():
             if bh <= 0:
                 continue
 
-            bad_chains = set()
             bad_bones = set()
             proj_bad = False
 
@@ -808,7 +799,6 @@ def main():
                         if ok.sum() < lw:
                             continue
                         # 段内平滑（不跨段）
-                        orig = v.copy()
                         for s0, e0 in segs:
                             L = e0 - s0 + 1
                             if L < lw:
@@ -877,7 +867,6 @@ def main():
             # 真正降级（tracking 状态也改，保持上下游一致）
             for k in downgraded:
                 tracking[k]["status"] = "track_only"
-                frames_out_status = qg.get("downgrade_to", "track_only")
                 if k < len(tracking):
                     tracking[k]["downgraded_from"] = "skeleton"
                     tracking[k]["downgrade_reason"] = qg.get("reason", "bad_projection")
