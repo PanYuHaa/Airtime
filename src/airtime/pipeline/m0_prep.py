@@ -18,6 +18,7 @@ import cv2
 import numpy as np
 
 from .. import cfg as CFG
+from .. import time_contract as TC
 from ..cfg import CONFIGS_DIR, DATA_DIR, OUTPUT_DIR
 
 PROJ = CONFIGS_DIR.parent
@@ -121,6 +122,8 @@ def main():
     ap.add_argument("--list", default="", help="清单 videos.json（默认用项目自带的）")
     ap.add_argument("--out", default=str(OUT), help="输出文件夹")
     ap.add_argument("--only", default="")
+    ap.add_argument("--slowmo-factor", type=float, default=None,
+                    help="慢放倍率（如 1.0=常速，4.0=4倍慢放；未指定时不确认真实物理时间）")
     a = ap.parse_args()
 
     videos_dir = Path(a.videos)
@@ -137,6 +140,7 @@ def main():
     only = [x for x in a.only.split(",") if x]
     (out / "clips").mkdir(parents=True, exist_ok=True)
     (out / "meta").mkdir(parents=True, exist_ok=True)
+    (out / "frames").mkdir(parents=True, exist_ok=True)
 
     index = {}
 
@@ -255,10 +259,19 @@ def main():
             main = (0, on-1)
             print(f"  切分: 单镜头", flush=True)
 
+        # 构建精确时序契约（源帧号 / PTS / VFR 检测 / 慢放倍率）
+        slowmo = v.get("slowmo_factor") if v.get("slowmo_factor") is not None else a.slowmo_factor
+        src_tl = TC.probe_source_timeline(src)
+        t_contract = TC.build_time_contract(src_tl, clip_frames=on, clip_fps=TARGET_FPS, slowmo_factor=slowmo)
+        (out / "frames" / f"{vid}.json").write_text(
+            json.dumps(t_contract, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
         meta = {
             "video": vid, "file": v["file"],
             "camera": v["camera"], "static_cam": v["camera"] == "tripod",
             "sport": v.get("sport"),        # 产品 ① 不需要，缺省 None
+            "time_contract": t_contract["summary"],
             "rotation_deg": info["rotation"],
             "coded_size": [info["coded_w"], info["coded_h"]],
             "display_size": [info["disp_w"], info["disp_h"]],

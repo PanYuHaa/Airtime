@@ -56,6 +56,27 @@ GEMX_CKPT = _dir(
 
 # 跑 GEM-X 的独立解释器（需要 torch + CUDA，与 2D 那套依赖分开装）
 GEMX_PYTHON = os.environ.get("AIRTIME_GEMX_PYTHON", "")
+# 跑 SAM2 的独立解释器（缺省复用 GEMX_PYTHON）
+SAM2_PYTHON = os.environ.get("AIRTIME_SAM2_PYTHON", "") or GEMX_PYTHON
+
+
+def resolve_sam2_config(ckpt: Path) -> str:
+    """根据 SAM2 权重文件名自动匹配对应的 Hydra 配置路径。"""
+    override = os.environ.get("AIRTIME_SAM2_CONFIG", "").strip()
+    if override:
+        return override
+    name = ckpt.name.lower()
+    is_v21 = (SAM2_DIR / "sam2" / "configs" / "sam2.1").is_dir() or "2.1" in name
+    prefix = "configs/sam2.1/sam2.1_hiera_" if is_v21 else "configs/sam2/sam2_hiera_"
+    if "large" in name or name.endswith("_l.pt"):
+        suffix = "l.yaml"
+    elif "base" in name or "b+" in name:
+        suffix = "b+.yaml"
+    elif "tiny" in name or name.endswith("_t.pt"):
+        suffix = "t.yaml"
+    else:
+        suffix = "s.yaml"
+    return prefix + suffix
 
 
 # ------------------------------------------------------------------ 配置

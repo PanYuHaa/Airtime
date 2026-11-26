@@ -83,6 +83,8 @@ def main() -> int:
     cfg = copy.deepcopy(cfg0)
     cfg.setdefault("camera", {})["mode"] = a.camera
 
+    # M1 已提供逐帧 bbox，跳过 GEM-X 内部无用的 YOLOXONNX 初始化与检测器加载
+    BV.YOLOXONNX = lambda *a, **kw: None
     BV.detect_track = lambda frames, det, **kw: make_tracks(
         len(frames), *frames[0].shape[:2], bbx)
 

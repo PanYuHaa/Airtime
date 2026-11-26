@@ -66,67 +66,63 @@ def detect_all(video, score_thr=0.15):
     return all_dets, W, H
 
 
+def _find_sam2_ckpt() -> Path | None:
+    if CFG.SAM2_CKPT.is_file():
+        return CFG.SAM2_CKPT
+    for name in (
+        "sam2.1_hiera_large.pt",
+        "sam2_hiera_large.pt",
+        "sam2.1_hiera_small.pt",
+        "sam2_hiera_small.pt",
+        "sam2.1_hiera_tiny.pt",
+    ):
+        cand = CFG.MODELS_DIR / name
+        if cand.is_file():
+            return cand
+    return None
+
+
 def sam2_fill(video, seed_k, seed_box, W, H):
     """SAM2 从种子传播，返回 {frame_idx: box}
 
     只用单个种子（框最大的那一帧）向前后传播。
-    试过在缺口段额外播种，会误把「路人」当主体补进来（某条素材的 347-349 帧），
-    已回退 —— 详见 process() 里的说明。
+    通过独立子进程调用含 torch 的解释器（AIRTIME_SAM2_PYTHON / AIRTIME_GEMX_PYTHON，
+    未设置时回退当前解释器），避免主流程轻量环境强绑 torch，也不再硬编码个人目录。
     """
-    import shutil
+    import subprocess
     import tempfile
 
-    import torch
-    sys.path.insert(0, str(SAM2_DIR))
-    from sam2.build_sam import build_sam2_video_predictor
-
-    ckpt = Path.home() / "A2_pkg/models/sam2.1_hiera_small.pt"
-    if not ckpt.exists():
+    ckpt = _find_sam2_ckpt()
+    if ckpt is None or not SAM2_DIR.is_dir():
         return {}
 
-    tmpdir = Path(tempfile.mkdtemp(prefix="sam2t_"))
-    cap = cv2.VideoCapture(str(video))
-    scale = min(1.0, 720.0 / min(W, H))
-    tw, th = int(W*scale)//2*2, int(H*scale)//2*2
-    n = 0
-    while True:
-        ok, im = cap.read()
-        if not ok:
-            break
-        cv2.imwrite(str(tmpdir / f"{n:05d}.jpg"),
-                    cv2.resize(im, (tw, th), interpolation=cv2.INTER_AREA),
-                    [cv2.IMWRITE_JPEG_QUALITY, 95])
-        n += 1
-    cap.release()
+    py = CFG.SAM2_PYTHON or sys.executable
+    cfg_rel = CFG.resolve_sam2_config(ckpt)
+    runner = Path(__file__).resolve().parent / "m1_run_sam2.py"
 
-    pred = build_sam2_video_predictor(
-        "configs/sam2.1/sam2.1_hiera_s.yaml", str(ckpt), device="cuda")
-    sb = [seed_box[0]*scale, seed_box[1]*scale,
-          seed_box[2]*scale, seed_box[3]*scale]
-    out = {}
-    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
-        st = pred.init_state(str(tmpdir), offload_video_to_cpu=True)
-        pred.add_new_points_or_box(st, frame_idx=seed_k, obj_id=1,
-                                   box=np.array(sb, dtype=np.float32))
-        for fidx, _, ml in pred.propagate_in_video(st, start_frame_idx=seed_k,
-                                                   reverse=False):
-            m = (ml[0, 0] > 0).cpu().numpy()
-            if m.any():
-                ys, xs = np.where(m)
-                out[fidx] = [xs.min()/scale, ys.min()/scale,
-                             xs.max()/scale, ys.max()/scale]
-        for fidx, _, ml in pred.propagate_in_video(st, start_frame_idx=seed_k,
-                                                   reverse=True):
-            m = (ml[0, 0] > 0).cpu().numpy()
-            if m.any():
-                ys, xs = np.where(m)
-                out[fidx] = [xs.min()/scale, ys.min()/scale,
-                             xs.max()/scale, ys.max()/scale]
-    pred.reset_state(st)
-    del pred
-    torch.cuda.empty_cache()
-    shutil.rmtree(tmpdir, ignore_errors=True)
-    return out
+    with tempfile.TemporaryDirectory(prefix="sam2_ipc_") as tmp:
+        out_json = Path(tmp) / "boxes.json"
+        cmd = [
+            py,
+            str(runner),
+            "--video", str(video),
+            "--seed-k", str(int(seed_k)),
+            "--seed-box", json.dumps([float(x) for x in seed_box]),
+            "--width", str(int(W)),
+            "--height", str(int(H)),
+            "--sam2-dir", str(SAM2_DIR),
+            "--ckpt", str(ckpt),
+            "--cfg", cfg_rel,
+            "--out", str(out_json),
+        ]
+        r = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if r.returncode != 0:
+            tail = (r.stderr or r.stdout or "").strip()[-300:]
+            raise RuntimeError(f"SAM2 子进程失败 (rc={r.returncode}): {tail}")
+        if not out_json.is_file():
+            return {}
+        raw = json.loads(out_json.read_text(encoding="utf-8"))
+        return {int(k): [float(x) for x in v] for k, v in raw.items()}
 
 
 def build_status(boxes, sources, thr_h):

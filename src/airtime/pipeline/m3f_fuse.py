@@ -941,12 +941,29 @@ def main():
                     if valid_resid[k, si]:
                         n_fused_f += 1
 
+        tc_doc = None
+        tc_path = out / "frames" / f"{vid}.json"
+        if tc_path.is_file():
+            tc_doc = json.loads(tc_path.read_text(encoding="utf-8"))
+        tc_frames = {
+            int(item["i"]): item
+            for item in (tc_doc.get("frames") or [])
+            if isinstance(item, dict) and item.get("i") is not None
+        } if isinstance(tc_doc, dict) else {}
+
         frames_out = []
         for k in range(n):
             st = tracking[k]["status"]
+            tf = tc_frames.get(k)
+            extra_t = {}
+            if tf is not None:
+                extra_t["source_i"] = tf.get("source_frame_idx")
+                extra_t["source_t"] = tf.get("source_pts_s")
+                if tf.get("real_time_s") is not None:
+                    extra_t["real_t"] = tf.get("real_time_s")
             if st != "skeleton":
-                frames_out.append({"i": k, "t": round(k/fps, 3), "status": st,
-                                   "joints": None, "sources": None})
+                frames_out.append({"i": k, "t": round(k/fps, 3), **extra_t,
+                                   "status": st, "joints": None, "sources": None})
                 continue
             joints, sources = {}, {}
             for name in BODY_JOINTS:
@@ -958,13 +975,14 @@ def main():
                 else:
                     joints[name] = None
                     sources[name] = "none"
-            frames_out.append({"i": k, "t": round(k/fps, 3), "status": st,
-                               "joints": joints, "sources": sources,
+            frames_out.append({"i": k, "t": round(k/fps, 3), **extra_t,
+                               "status": st, "joints": joints, "sources": sources,
                                "quality": ("bad_projection"
                                            if k in bad_frames else "ok")})
 
         skel = {
             "video": vid, "frames": n, "fps": fps,
+            "time_contract": tc_doc.get("summary") if isinstance(tc_doc, dict) else None,
             "joint_names": BODY_JOINTS,
             "joint_map": JOINT_MAP,
             "config": cfg,
