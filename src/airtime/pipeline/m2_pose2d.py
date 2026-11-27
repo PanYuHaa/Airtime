@@ -21,10 +21,19 @@ import cv2
 import numpy as np
 
 from .. import det_deterministic as DET
+from ..cfg import RTMPOSE_ONNX
 
 HALPE26_URL = ("https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/"
                "onnx_sdk/rtmpose-x_simcc-body7_pt-body7-halpe26_700e-384x288-"
                "7fb6e239_20230606.zip")
+
+
+def _resolve_rtmpose_model() -> str:
+    """优先用本地/挂载权重；缺失时回退到官方下载 URL（向后兼容）。"""
+    if RTMPOSE_ONNX.is_file():
+        return str(RTMPOSE_ONNX)
+    return HALPE26_URL
+
 
 # Halpe26 关节名（与 A 版本一致）
 NAMES26 = ["nose", "left_eye", "right_eye", "left_ear", "right_ear",
@@ -111,7 +120,9 @@ def main():
     DET.patch_rtmlib(verbose=False)
 
     print("加载 RTMPose-X Halpe26...", flush=True)
-    pose = RTMPose(HALPE26_URL, model_input_size=(288, 384),
+    model = _resolve_rtmpose_model()
+    print(f"  RTMPose 权重: {model}", flush=True)
+    pose = RTMPose(model, model_input_size=(288, 384),
                    backend="onnxruntime", device=a.device)
     print("  ✓ 加载完成", flush=True)
 
