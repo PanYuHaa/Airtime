@@ -1,0 +1,71 @@
+# Airtime — Docker Compose
+#
+# 一条命令跑起来（先按 docs/DOCKER.md 把权重放进 ./models）：
+#   docker compose run --rm --entrypoint /opt/venvs/main/bin/airtime airtime /data/input.mp4
+#   或：make docker-run VIDEO=data/input.mp4
+# （用 --entrypoint 显式指定入口，不依赖镜像 ENTRYPOINT/CMD 的具体写法。）
+#
+# 镜像分两档（tag 由 IMAGE_TAG 控制，默认 dev）：
+#   IMAGE_TAG=dev   精简档（--build-arg WITH_GEMX=0）
+#   IMAGE_TAG=full  全量档（--build-arg WITH_GEMX=1，含 GEM-X / SAM2 的 torch 环境）
+#
+# 不用 compose 也能手跑，等价命令：
+#   docker run --rm --gpus all --ipc=host --shm-size=2g \
+#     -v "$PWD/models:/models:ro" -v "$PWD/data:/data" -v "$PWD/runs:/runs" \
+#     -e AIRTIME_MODELS=/models -e AIRTIME_DATA=/data -e AIRTIME_OUTPUT=/runs \
+#     -w /app --entrypoint /opt/venvs/main/bin/airtime airtime:dev /data/input.mp4
+#
+# 注意：本文件不含 version: 字段——Compose v2 已废弃该字段，写了只会告警。
+
+services:
+  airtime:
+    image: airtime:${IMAGE_TAG:-dev}
+
+    # 构建上下文 = 仓库根目录（Dockerfile 与 .dockerignore 由 T2 负责）
+    build:
+      context: .
+      args:
+        # 0 = 精简（M0/M1/M2/M3F/M8），1 = 全量（加装 GEM-X + SAM2 的 torch 环境）
+        WITH_GEMX: ${WITH_GEMX:-0}
+
+    # GPU 直通：compose v2 写法，等价于 docker run --gpus all。
+    # 需要宿主机已装 NVIDIA 驱动 + NVIDIA Container Toolkit（WSL2 下走 Docker Desktop 的 GPU 集成）。
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    # torch DataLoader 的多进程共享内存依赖 POSIX 共享内存，
+    # 默认 64MB 的 /dev/shm 会让 worker 直接被 kill，必须 host。
+    ipc: host
+
+    # WSL2 默认给容器的内存偏小，2GB /dev/shm 是「DataLoader 能跑」与「不撑爆宿主」的折中值。
+    # 报 Bus error / DataLoader worker killed 时调大；宿主内存吃紧可降到 1gb。
+    shm_size: 2gb
+
+    # 代码已烘进镜像 /app；这里固定工作目录，保证相对路径行为一致。
+    working_dir: /app
+
+    # 容器内路径约定（T1 已定）：权重 /models 只读，数据 /data，输出 /runs。
+    # AIRTIME_GEMX / AIRTIME_SAM2 指向镜像内烘入的代码（cfg.py 默认会去找
+    # $AIRTIME_MODELS/GEM-X 和 $AIRTIME_MODELS/sam2，那是宿主机权重布局，容器里另有其位），
+    # 不显式设置的话全量档会去 /models 下找代码而落空。
+    environment:
+      AIRTIME_MODELS: /models
+      AIRTIME_DATA: /data
+      AIRTIME_OUTPUT: /runs
+      AIRTIME_GEMX: /opt/GEM-X
+      AIRTIME_SAM2: /opt/sam2
+      # torch 子进程解释器（全量档才存在；精简档这两个 venv 不存在也没关系，
+      # 因为精简档不会走到需要它们的阶段）。
+      AIRTIME_GEMX_PYTHON: /opt/venvs/torch/bin/python
+      AIRTIME_SAM2_PYTHON: /opt/venvs/torch/bin/python
+
+    volumes:
+      # 权重只读挂载，绝不写回仓库；./data 与 ./runs 可写。
+      - ./models:/models:ro
+      - ./data:/data
+      - ./runs:/runs

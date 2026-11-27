@@ -1,0 +1,51 @@
+# 版本控制
+.git
+.gitignore
+.github
+
+# Python 缓存 / 构建产物
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# 模型权重（运行时挂载，体积大）
+models/
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.npz
+
+# 数据与输出（运行时挂载）
+data/
+runs/
+out/
+work/
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+# 文档与示例，镜像里用不到
+docs/
+examples/
+CHANGELOG.md
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+SECURITY.md
+
+# 本地配置
+.env
+*.local.json
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
